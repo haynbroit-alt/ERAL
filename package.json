@@ -7,10 +7,23 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "demo": "tsx examples/notion-editor-ready.ts"
+    "demo": "tsx examples/notion-editor-ready.ts",
+    "demo:notion": "tsx examples/notion-editor-ready.ts",
+    "demo:ghost": "tsx examples/ghost-publish.ts",
+    "demo:linkedin": "tsx examples/linkedin-post.ts",
+    "demo:live": "npm run build && node dist/examples/playwright-live-demo.js"
+  },
+  "peerDependencies": {
+    "playwright": ">=1.40.0"
+  },
+  "peerDependenciesMeta": {
+    "playwright": {
+      "optional": true
+    }
   },
   "devDependencies": {
-    "typescript": "^5.5.4",
-    "tsx": "^4.16.2"
+    "playwright": "^1.61.1",
+    "tsx": "^4.16.2",
+    "typescript": "^5.5.4"
   }
 }

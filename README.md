@@ -26,23 +26,34 @@ Paradigm: `Observation -> Simulation -> Selection -> Gate -> Execution -> Feedba
 
 ```
 src/
-  types.ts        Structural architecture: DomState, Task, FSM, ConfidenceVector
-  confidence.ts   Logic matrix: confidence formula + SAFE/UNCERTAIN/RISKY gating
-  engine.ts       Constrained runtime script: execute() entry point
-  feedback.ts      Feedback loop: post-execution confidence adjustment
-  index.ts        Barrel export
+  types.ts              Structural architecture: DomState, Task, FSM, ConfidenceVector
+  confidence.ts         Logic matrix: confidence formula + SAFE/UNCERTAIN/RISKY gating
+  engine.ts             Constrained runtime script: execute() entry point
+  feedback.ts           Feedback loop: post-execution confidence adjustment
+  playwright-driver.ts  Real DomState sampler (MutationObserver/PerformanceObserver/network events)
+  index.ts              Barrel export (core only — playwright-driver.ts is a separate,
+                        optional-peer-dependency module, imported directly)
 examples/
-  notion-editor-ready.ts   Worked atom demonstrating the full pipeline
+  notion-editor-ready.ts    Worked atom: Notion editor typing (simulated snapshots)
+  ghost-publish.ts          Worked atom: Ghost CMS publish click (simulated snapshots)
+  linkedin-post.ts          Worked atom: LinkedIn share-box post (simulated snapshots)
+  playwright-live-demo.ts   Live proof: real Chromium page sampled via playwright-driver.ts
 docs/
   PROMPT.md       The finalized ERAL v1.0 meta-prompt used to generate new atoms
+rust/eral-core/
+  src/lib.rs      Confidence formula + ternary gate ported to Rust, compiled to
+                  wasm32-unknown-unknown for sub-2ms in-browser scoring
 ```
 
 ## Usage
 
 ```bash
 npm install
-npm run build   # type-check and compile to dist/
-npm run demo     # run the worked Notion-editor atom against SAFE/UNCERTAIN/RISKY snapshots
+npm run build         # type-check and compile to dist/
+npm run demo:notion    # simulated Notion atom (SAFE/UNCERTAIN/RISKY snapshots)
+npm run demo:ghost      # simulated Ghost CMS atom
+npm run demo:linkedin   # simulated LinkedIn atom
+npm run demo:live       # real Chromium page sampled via the Playwright driver
 ```
 
 ```ts
@@ -55,5 +66,24 @@ const outcome = await execute(task, domState, {
 });
 ```
 
-See `docs/PROMPT.md` for the meta-prompt this architecture implements, and
-`examples/notion-editor-ready.ts` for a full worked atom.
+To sample `domState` from a real page instead of hand-authoring it:
+
+```ts
+import { NetworkIdleTracker, sampleDomState } from "eral/dist/playwright-driver.js";
+
+const tracker = new NetworkIdleTracker(page); // construct once per Page, before the action
+const domState = await sampleDomState(page, task.targetSelector, tracker);
+```
+
+`demo:live` runs through `tsc` + `node` rather than `tsx`: `tsx`'s esbuild
+transform injects `__name()` helper calls that break when a function is
+serialized for `page.evaluate` (a known tsx/esbuild limitation), so the
+Playwright-dependent demo needs a plain `tsc` build first.
+
+### Rust/WASM core
+
+`rust/eral-core` ports the confidence formula and ternary gate to Rust,
+compiled to `wasm32-unknown-unknown` — see `rust/eral-core/README.md` for
+build instructions and the `eralGate(domState, weights?)` JS entry point.
+
+See `docs/PROMPT.md` for the meta-prompt this architecture implements.

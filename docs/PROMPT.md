@@ -61,4 +61,6 @@ Example atoms:
 | B. Logic Matrix           | `src/confidence.ts`        |
 | C. Execution Script       | `src/engine.ts`             |
 | D. Feedback Loop          | `src/feedback.ts`           |
-| Worked atom example       | `examples/notion-editor-ready.ts` |
+| Worked atom examples      | `examples/notion-editor-ready.ts`, `examples/ghost-publish.ts`, `examples/linkedin-post.ts` |
+| Real DOM observation      | `src/playwright-driver.ts`, proven live in `examples/playwright-live-demo.ts` |
+| A + B in Rust/WASM        | `rust/eral-core/src/lib.rs` |
