@@ -3,10 +3,12 @@
   "version": "1.0.0",
   "description": "ERAL (Execution Reliability & Anticipation Layer) — a probabilistic gating engine that replaces try-catch web automation with local DOM simulation and confidence-scored execution.",
   "type": "module",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "dist/src/index.js",
+  "types": "dist/src/index.d.ts",
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "postinstall": "npm run build",
+    "start": "node dist/src/index.js",
     "demo": "tsx examples/notion-editor-ready.ts",
     "demo:notion": "tsx examples/notion-editor-ready.ts",
     "demo:ghost": "tsx examples/ghost-publish.ts",
@@ -25,10 +27,12 @@
       "optional": true
     }
   },
+  "dependencies": {
+    "typescript": "^5.5.4"
+  },
   "devDependencies": {
     "@types/node": "^26.1.0",
     "playwright": "^1.61.1",
-    "tsx": "^4.16.2",
-    "typescript": "^5.5.4"
+    "tsx": "^4.16.2"
   }
 }

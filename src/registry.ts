@@ -30,6 +30,8 @@ export interface TrajectoryStats {
 export interface RegistryStore {
   get(key: TrajectoryKey): TrajectoryStats | undefined;
   record(key: TrajectoryKey, success: boolean): TrajectoryStats;
+  /** All tracked trajectories, keyed by `trajectoryId`. Used for aggregate reporting (e.g. a /status endpoint). */
+  all(): Record<string, TrajectoryStats>;
 }
 
 export function trajectoryId(key: TrajectoryKey): string {
@@ -69,6 +71,10 @@ export class InMemoryRegistryStore implements RegistryStore {
   record(key: TrajectoryKey, success: boolean): TrajectoryStats {
     return recordInto(this.stats, key, success);
   }
+
+  all(): Record<string, TrajectoryStats> {
+    return { ...this.stats };
+  }
 }
 
 /** JSON-file-backed registry; learns across process restarts on one machine. */
@@ -99,6 +105,10 @@ export class FileRegistryStore implements RegistryStore {
     const next = recordInto(this.stats, key, success);
     this.persist();
     return next;
+  }
+
+  all(): Record<string, TrajectoryStats> {
+    return { ...this.stats };
   }
 }
 
