@@ -60,7 +60,10 @@ Example atoms:
 | A. Structural Architecture | `src/types.ts`            |
 | B. Logic Matrix           | `src/confidence.ts`        |
 | C. Execution Script       | `src/engine.ts`             |
-| D. Feedback Loop          | `src/feedback.ts`           |
+| D. Feedback Loop          | `src/feedback.ts` (toy online nudge) + `src/calibration.ts`/`scripts/calibrate.ts` (real offline learning) |
 | Worked atom examples      | `examples/notion-editor-ready.ts`, `examples/ghost-publish.ts`, `examples/linkedin-post.ts` |
 | Real DOM observation      | `src/playwright-driver.ts`, proven live in `examples/playwright-live-demo.ts` |
 | A + B in Rust/WASM        | `rust/eral-core/src/lib.rs` |
+| Pillar 1: Digital Twin Registry | `src/registry.ts`, proven in `examples/registry-learning-demo.ts` |
+| Pillar 2: Shadow-clone simulation | `src/simulate.ts`, proven live in `examples/simulate-interrupt-demo.ts` |
+| Pillar 3: Offline calibration | `src/calibration.ts`, `scripts/calibrate.ts`, proven in `examples/calibration-demo.ts` |

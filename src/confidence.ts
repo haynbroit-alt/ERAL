@@ -13,6 +13,7 @@ import {
   GATING_THRESHOLDS,
   RiskClass,
 } from "./types.js";
+import { evidenceCount, priorMean, TrajectoryStats } from "./registry.js";
 
 /**
  * Derives the three sub-scores from a raw DOM observation.
@@ -52,6 +53,31 @@ export function computeConfidence(
     weights.wInter * (1 - clamp01(rInter)) +
     weights.wState * clamp01(nState);
   return clamp01(c);
+}
+
+/**
+ * Blends the instantaneous confidence with the Digital Twin Registry's
+ * learned prior for this exact trajectory, using an IMDB-style credibility
+ * weighting: the more real evidence the registry has (`evidenceCount`), the
+ * more the historical success rate (`priorMean`) dominates over the
+ * one-shot heuristic; with no evidence, the instantaneous score passes
+ * through unchanged.
+ *
+ *   C' = (C * k + priorMean * n) / (k + n)
+ *
+ * `k` is the pseudo-count of trust given to the instantaneous signal by
+ * default (default 5: roughly "trust the live DOM read as much as 5 real
+ * historical observations" until the registry has more than that).
+ */
+export function calibrateConfidence(
+  instantConfidence: number,
+  stats: TrajectoryStats | undefined,
+  k = 5,
+): number {
+  const n = evidenceCount(stats);
+  if (n <= 0) return clamp01(instantConfidence);
+  const blended = (instantConfidence * k + priorMean(stats) * n) / (k + n);
+  return clamp01(blended);
 }
 
 /** Ternary gate: SAFE >= 0.85, UNCERTAIN in [0.40, 0.85), RISKY < 0.40. */

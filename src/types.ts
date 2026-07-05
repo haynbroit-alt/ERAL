@@ -80,13 +80,30 @@ export type ExecutionState =
   | "FALLBACK"
   | "ABORTED";
 
+/**
+ * Result of a shadow-clone counterfactual: "if the detected interrupt(s)
+ * were removed, would the target settle into a safely actionable state?"
+ * Produced by `simulateInterruptRemoval` (see src/simulate.ts). This is a
+ * structural dry-run against a cloned DOM, not a prediction of the live
+ * page's future — it never touches the real page.
+ */
+export interface SimulationResult {
+  /** Whether the target becomes ready (visible, centered, unobscured) once known interrupts are stripped from the clone. */
+  wouldClearIfInterruptsRemoved: boolean;
+  /** Absolute pixel delta of the target's bounding-box center, live vs. clone-with-interrupts-removed. Large values mean removing the interrupt would itself reflow the page significantly. */
+  layoutShiftDelta: number;
+}
+
 export interface ExecutionOutcome {
   taskId: string;
   finalState: ExecutionState;
+  /** Final, possibly registry-calibrated confidence used for gating (see ConfidenceVector for the raw instantaneous sub-scores). */
   confidence: number;
   riskClass: RiskClass;
   success: boolean;
   /** Present when finalState is FALLBACK or ABORTED. */
   reason?: string;
   observedAt: number;
+  /** Present only when a non-SAFE decision was enriched via `ExecuteOptions.simulate`. */
+  simulation?: SimulationResult;
 }
