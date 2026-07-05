@@ -65,8 +65,10 @@ src/
   simulate.ts           Pillar 2: shadow-clone interrupt-removal counterfactual (Playwright-dependent)
   calibration.ts        Pillar 3: offline weight calibration by log-loss grid search
   playwright-driver.ts  Real DomState sampler (MutationObserver/PerformanceObserver/network events)
+  server.ts             HTTP surface: /health, /status, /gate, /report (see "Running as a service" below)
   index.ts              Barrel export (core only — playwright-driver.ts/simulate.ts are separate,
-                        optional-peer-dependency modules, imported directly)
+                        optional-peer-dependency modules, imported directly); also the deploy entry
+                        point (starts the server iff executed directly, e.g. `node dist/src/index.js`)
 examples/
   notion-editor-ready.ts     Worked atom: Notion editor typing (simulated snapshots)
   ghost-publish.ts           Worked atom: Ghost CMS publish click (simulated snapshots)
@@ -112,7 +114,7 @@ const outcome = await execute(task, domState, {
 To sample `domState` from a real page instead of hand-authoring it:
 
 ```ts
-import { NetworkIdleTracker, sampleDomState } from "eral/dist/playwright-driver.js";
+import { NetworkIdleTracker, sampleDomState } from "eral/dist/src/playwright-driver.js";
 
 const tracker = new NetworkIdleTracker(page); // construct once per Page, before the action
 const domState = await sampleDomState(page, task.targetSelector, tracker);
@@ -127,7 +129,7 @@ With all three pillars wired in:
 
 ```ts
 import { execute, InMemoryRegistryStore } from "eral";
-import { simulateInterruptRemoval } from "eral/dist/simulate.js";
+import { simulateInterruptRemoval } from "eral/dist/src/simulate.js";
 
 const registry = new InMemoryRegistryStore(); // or FileRegistryStore("./eral.registry.json")
 
@@ -142,6 +144,34 @@ const outcome = await execute(task, domState, {
   onTrace: (record) => appendFileSync("traces.jsonl", `${JSON.stringify(record)}\n`),
 });
 ```
+
+## Running as a service
+
+`npm install` alone builds and can boot the API: `postinstall` runs `tsc`,
+and `dist/src/index.js` (the package's `main`) starts the HTTP server in
+`src/server.ts` when executed directly — no separate build step or start
+command needed on a host that just runs `npm install` then `node <main>`
+(e.g. Render/Heroku-style buildpacks). Set `PORT` (defaults to 3000) and
+optionally `ERAL_REGISTRY_PATH` (defaults to `./eral.registry.json`; note
+this is lost on redeploy unless the host gives you a persistent disk).
+
+```
+GET  /health   -> { status: "ok" }
+GET  /status   -> { status, trajectoriesTracked, totalObservations, averageLearnedSuccessRate }
+POST /gate     -> body: { task, domState, domain? }
+                  returns: { vector, instantConfidence, confidence, riskClass, trajectory }
+POST /report   -> body: { domain, selectorPattern, actionKind, success }
+                  returns: { stats } (the updated Beta-Bernoulli posterior)
+```
+
+`/gate` and `/report` expose exactly the Digital Twin Registry math from
+`src/confidence.ts`/`src/registry.ts` as a shared, network-accessible
+service — multiple automation processes hitting `/report` build one common
+learned history instead of each staying isolated in its own process, per
+the roadmap's "Digital Twin Cloud Registry" milestone. There is no browser
+in this server — DOM sampling and the shadow-clone simulation still happen
+client-side via `playwright-driver.ts`/`simulate.ts`; this service is pure
+scoring and memory.
 
 ### Rust/WASM core
 
