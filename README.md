@@ -147,13 +147,19 @@ const outcome = await execute(task, domState, {
 
 ## Running as a service
 
-`npm install` alone builds and can boot the API: `postinstall` runs `tsc`,
-and `dist/src/index.js` (the package's `main`) starts the HTTP server in
-`src/server.ts` when executed directly — no separate build step or start
-command needed on a host that just runs `npm install` then `node <main>`
-(e.g. Render/Heroku-style buildpacks). Set `PORT` (defaults to 3000) and
-optionally `ERAL_REGISTRY_PATH` (defaults to `./eral.registry.json`; note
-this is lost on redeploy unless the host gives you a persistent disk).
+`npm install` alone builds and boots the API: `postinstall` runs `tsc`
+(`npm run build`), which mirrors `src/` under `dist/src/` (the package's
+real `main`, which starts the HTTP server in `src/server.ts` when executed
+directly) — but a `postbuild` step (`scripts/postbuild.mjs`) also writes a
+tiny unconditional shim at the literal path `dist/index.js`, because some
+hosts (Render among them) hardcode `node dist/index.js` as the run command
+regardless of `package.json`'s `main`/`start` fields, and there's no way to
+fix that from inside the repo — only to make the path they expect actually
+exist. Either entry point works: `node dist/index.js` (the shim) or
+`npm start` (`node dist/src/index.js`, the real entry) both start the same
+server. Set `PORT` (defaults to 3000) and optionally `ERAL_REGISTRY_PATH`
+(defaults to `./eral.registry.json`; note this is lost on redeploy unless
+the host gives you a persistent disk).
 
 ```
 GET  /health   -> { status: "ok" }

@@ -7,6 +7,7 @@
   "types": "dist/src/index.d.ts",
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "postbuild": "node scripts/postbuild.mjs",
     "postinstall": "npm run build",
     "start": "node dist/src/index.js",
     "demo": "tsx examples/notion-editor-ready.ts",
