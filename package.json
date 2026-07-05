@@ -11,7 +11,11 @@
     "demo:notion": "tsx examples/notion-editor-ready.ts",
     "demo:ghost": "tsx examples/ghost-publish.ts",
     "demo:linkedin": "tsx examples/linkedin-post.ts",
-    "demo:live": "npm run build && node dist/examples/playwright-live-demo.js"
+    "demo:live": "npm run build && node dist/examples/playwright-live-demo.js",
+    "demo:registry": "tsx examples/registry-learning-demo.ts",
+    "demo:simulate": "npm run build && node dist/examples/simulate-interrupt-demo.js",
+    "demo:calibration": "tsx examples/calibration-demo.ts",
+    "calibrate": "tsx scripts/calibrate.ts"
   },
   "peerDependencies": {
     "playwright": ">=1.40.0"
@@ -22,6 +26,7 @@
     }
   },
   "devDependencies": {
+    "@types/node": "^26.1.0",
     "playwright": "^1.61.1",
     "tsx": "^4.16.2",
     "typescript": "^5.5.4"

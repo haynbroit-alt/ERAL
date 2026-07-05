@@ -4,6 +4,11 @@
  * Post-execution correction signal: nudges the confidence weights based on
  * whether the last gated decision matched reality. Pure local delta-update,
  * no external learning service.
+ *
+ * This online per-call nudge is kept for the single-file prompt contract,
+ * but oscillates rather than converges. For real calibration, accumulate
+ * traces via `ExecuteOptions.onTrace` and use `src/calibration.ts`
+ * (`calibrateWeights`) or `scripts/calibrate.ts` instead.
  */
 
 import { ConfidenceWeights, ExecutionOutcome, RiskClass } from "./types.js";

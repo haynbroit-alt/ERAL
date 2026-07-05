@@ -4,29 +4,56 @@
  * Single entry point: execute(task, domState, options). Mechanical and
  * idempotent — calling it twice against an unchanged DomState produces the
  * same ExecutionOutcome and never re-runs a settled action.
+ *
+ * Beyond the base gate, this wires in the two learning pillars: a
+ * `registry` (Digital Twin Registry, src/registry.ts) that calibrates the
+ * instantaneous confidence against real historical outcomes for this exact
+ * trajectory, and a `simulate` hook (shadow-clone dry-run, src/simulate.ts)
+ * that enriches non-SAFE decisions with a structural counterfactual before
+ * confirm/fallback logic runs. Both are optional — omit them and this is
+ * exactly the stateless v1 gate.
  */
 
-import { classify, computeConfidence, deriveConfidenceVector } from "./confidence.js";
+import { calibrateConfidence, classify, computeConfidence, deriveConfidenceVector } from "./confidence.js";
+import { RegistryStore, taskToKey, TrajectoryKey } from "./registry.js";
 import {
+  ConfidenceVector,
   ConfidenceWeights,
   DEFAULT_WEIGHTS,
   DomState,
   ExecutionOutcome,
   ExecutionState,
+  SimulationResult,
   Task,
 } from "./types.js";
 
 /** The mechanical action applied once gating clears a task. Zero intelligence. */
 export type RunAction = (task: Task) => Promise<boolean> | boolean;
 
+/** One observed (vector, real-outcome) pair, fed to onTrace for offline calibration (src/calibration.ts). */
+export interface TraceRecord {
+  vector: ConfidenceVector;
+  success: boolean;
+}
+
 export interface ExecuteOptions {
   weights?: ConfidenceWeights;
   /** Invoked only when the task is SAFE (or UNCERTAIN + confirmed). Required to have any effect. */
   runAction?: RunAction;
   /** Invoked for UNCERTAIN tasks to request human-in-the-loop or delayed-retry approval. */
-  confirm?: (task: Task, confidence: number) => Promise<boolean> | boolean;
+  confirm?: (task: Task, confidence: number, simulation?: SimulationResult) => Promise<boolean> | boolean;
   /** Invoked for RISKY tasks (or declined UNCERTAIN tasks) instead of aborting outright. */
-  fallback?: (task: Task, confidence: number) => Promise<boolean> | boolean;
+  fallback?: (task: Task, confidence: number, simulation?: SimulationResult) => Promise<boolean> | boolean;
+  /** Digital Twin Registry: blends instant confidence with this trajectory's learned success rate. */
+  registry?: RegistryStore;
+  /** Site identity for the registry key; defaults to "unknown" (all sites share one bucket). */
+  domain?: string;
+  /** Pseudo-count of trust given to the instantaneous signal before the registry's prior dominates. Default 5. */
+  calibrationK?: number;
+  /** Shadow-clone counterfactual, run once when the gate is not SAFE. See src/simulate.ts. */
+  simulate?: (task: Task, domState: DomState) => Promise<SimulationResult> | SimulationResult;
+  /** Fed one (vector, actualSuccess) record whenever runAction is actually attempted. Feeds scripts/calibrate.ts. */
+  onTrace?: (record: TraceRecord) => void;
 }
 
 const settledTasks = new Map<string, ExecutionOutcome>();
@@ -46,13 +73,29 @@ export async function execute(
   if (cached) return cached; // idempotent: never repeat a settled task
 
   const weights = options.weights ?? DEFAULT_WEIGHTS;
+  const key: TrajectoryKey = taskToKey(task, options.domain ?? "unknown");
 
   let state: ExecutionState = "OBSERVING";
   state = "SIMULATING";
   const vector = deriveConfidenceVector(domState);
   state = "SELECTING";
-  const confidence = computeConfidence(vector, weights);
+  const instantConfidence = computeConfidence(vector, weights);
+  const confidence = options.registry
+    ? calibrateConfidence(instantConfidence, options.registry.get(key), options.calibrationK)
+    : instantConfidence;
   const riskClass = classify(confidence);
+
+  let simulation: SimulationResult | undefined;
+  if (riskClass !== "SAFE" && options.simulate) {
+    simulation = await options.simulate(task, domState);
+  }
+
+  const attempt = async (): Promise<boolean> => {
+    const result = await runOrDefault(options.runAction, task);
+    options.registry?.record(key, result);
+    options.onTrace?.({ vector, success: result });
+    return result;
+  };
 
   let finalState: ExecutionState;
   let success = false;
@@ -61,19 +104,19 @@ export async function execute(
   if (riskClass === "SAFE") {
     state = "GATED_SAFE";
     state = "EXECUTING";
-    success = await runOrDefault(options.runAction, task);
+    success = await attempt();
     finalState = success ? "SETTLED" : "ABORTED";
     if (!success) reason = "runAction returned false";
   } else if (riskClass === "UNCERTAIN") {
     state = "GATED_UNCERTAIN";
-    const confirmed = options.confirm ? await options.confirm(task, confidence) : false;
+    const confirmed = options.confirm ? await options.confirm(task, confidence, simulation) : false;
     if (confirmed) {
       state = "EXECUTING";
-      success = await runOrDefault(options.runAction, task);
+      success = await attempt();
       finalState = success ? "SETTLED" : "ABORTED";
       if (!success) reason = "runAction returned false";
     } else if (options.fallback) {
-      success = await options.fallback(task, confidence);
+      success = await options.fallback(task, confidence, simulation);
       finalState = success ? "FALLBACK" : "ABORTED";
       reason = success ? "uncertain: fallback executed" : "uncertain: fallback failed";
     } else {
@@ -83,7 +126,7 @@ export async function execute(
   } else {
     state = "GATED_RISKY";
     if (options.fallback) {
-      success = await options.fallback(task, confidence);
+      success = await options.fallback(task, confidence, simulation);
       finalState = success ? "FALLBACK" : "ABORTED";
       reason = success ? "risky: fallback executed" : "risky: fallback failed";
     } else {
@@ -100,6 +143,7 @@ export async function execute(
     success,
     reason,
     observedAt: domState.observedAt,
+    simulation,
   };
 
   if (finalState === "SETTLED" || finalState === "FALLBACK") {
