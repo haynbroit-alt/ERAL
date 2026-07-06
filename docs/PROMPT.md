@@ -68,3 +68,4 @@ Example atoms:
 | Pillar 2: Shadow-clone simulation | `src/simulate.ts`, proven live in `examples/simulate-interrupt-demo.ts` |
 | Pillar 3: Offline calibration | `src/calibration.ts`, `scripts/calibrate.ts`, proven in `examples/calibration-demo.ts` |
 | Pillar 4: API-less distributed learning (CRDT capsules) | `src/registry.ts` (`Capsule`, `mergeCapsules`), `scripts/merge-twins.ts`, proven in `examples/twin-capsule-demo.ts` |
+| Quantitative benchmark (gate vs. naive, precision/recall, learning curve) | `examples/benchmark-demo.ts` |

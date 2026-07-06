@@ -19,6 +19,7 @@
     "demo:simulate": "npm run build && node dist/examples/simulate-interrupt-demo.js",
     "demo:calibration": "tsx examples/calibration-demo.ts",
     "demo:capsule": "tsx examples/twin-capsule-demo.ts",
+    "demo:benchmark": "tsx examples/benchmark-demo.ts",
     "calibrate": "tsx scripts/calibrate.ts",
     "merge-twins": "tsx scripts/merge-twins.ts"
   },
