@@ -18,7 +18,9 @@
     "demo:registry": "tsx examples/registry-learning-demo.ts",
     "demo:simulate": "npm run build && node dist/examples/simulate-interrupt-demo.js",
     "demo:calibration": "tsx examples/calibration-demo.ts",
-    "calibrate": "tsx scripts/calibrate.ts"
+    "demo:capsule": "tsx examples/twin-capsule-demo.ts",
+    "calibrate": "tsx scripts/calibrate.ts",
+    "merge-twins": "tsx scripts/merge-twins.ts"
   },
   "peerDependencies": {
     "playwright": ">=1.40.0"

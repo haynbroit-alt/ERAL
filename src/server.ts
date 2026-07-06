@@ -9,15 +9,24 @@
  * process learning its own isolated history.
  *
  * Routes:
- *   GET  /health  -> liveness probe
- *   GET  /status  -> aggregate registry stats (real numbers, not decoration)
- *   POST /gate    -> { task, domState, domain? } -> confidence + risk class
- *   POST /report  -> { domain, selectorPattern, actionKind, success } -> records a real outcome
+ *   GET  /health       -> liveness probe
+ *   GET  /status       -> aggregate registry stats (real numbers, not decoration)
+ *   POST /gate         -> { task, domState, domain? } -> confidence + risk class
+ *   POST /report       -> { domain, selectorPattern, actionKind, success } -> records a real outcome
+ *   GET  /twin/export   -> this instance's capsule (see src/registry.ts)
+ *   POST /twin/merge    -> body: a capsule -> merges it in
+ *
+ * The /twin/* routes are a convenience, not the mechanism: capsules are
+ * plain JSON and merge correctly (commutative, associative, idempotent)
+ * however they travel -- git, a shared drive, these two HTTP routes, or
+ * anything else. No coordination service is required for capsule sync to
+ * be correct; these routes just save a `curl` round-trip when a network
+ * path happens to be convenient.
  */
 
 import { createServer, IncomingMessage, ServerResponse } from "node:http";
 import { calibrateConfidence, classify, computeConfidence, deriveConfidenceVector } from "./confidence.js";
-import { evidenceCount, FileRegistryStore, priorMean, taskToKey, TrajectoryKey } from "./registry.js";
+import { Capsule, evidenceCount, FileRegistryStore, priorMean, taskToKey, TrajectoryKey } from "./registry.js";
 import { DomState, Task } from "./types.js";
 
 const REGISTRY_PATH = process.env.ERAL_REGISTRY_PATH ?? "./eral.registry.json";
@@ -107,6 +116,16 @@ function handleStatus(res: ServerResponse): void {
   });
 }
 
+async function handleTwinMerge(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const capsule = (await readJsonBody(req)) as unknown as Capsule;
+  if (capsule?.format !== "eral-twin-capsule/v1" || typeof capsule.trajectories !== "object") {
+    sendJson(res, 400, { error: "body must be an eral-twin-capsule/v1 capsule" });
+    return;
+  }
+  registry.mergeCapsule(capsule);
+  sendJson(res, 200, { merged: true, trajectoriesTracked: Object.keys(registry.all()).length });
+}
+
 export function startServer(port = Number(process.env.PORT) || 3000) {
   const server = createServer((req, res) => {
     void (async () => {
@@ -119,6 +138,10 @@ export function startServer(port = Number(process.env.PORT) || 3000) {
           await handleGate(req, res);
         } else if (req.method === "POST" && req.url === "/report") {
           await handleReport(req, res);
+        } else if (req.method === "GET" && req.url === "/twin/export") {
+          sendJson(res, 200, registry.exportCapsule());
+        } else if (req.method === "POST" && req.url === "/twin/merge") {
+          await handleTwinMerge(req, res);
         } else {
           sendJson(res, 404, { error: "not found" });
         }

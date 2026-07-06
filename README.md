@@ -49,9 +49,27 @@ learns the site instead of just reading it:
    recorded `(vector, actualSuccess)` traces (`ExecuteOptions.onTrace`),
    scored by log-loss — see `examples/calibration-demo.ts`, which recovers a
    known ground-truth weighting from outcomes alone.
+4. **API-less distributed learning** (`src/registry.ts`'s `Capsule` type,
+   `scripts/merge-twins.ts`) — the Digital Twin Registry's internal state
+   for one trajectory isn't a single (alpha, beta) pair, it's a per-source
+   [G-Counter](https://en.wikipedia.org/wiki/Conflict-free_replicated_data_type)
+   (`Record<sourceId, {successes, failures}>`). That makes it a CRDT:
+   `exportCapsule()`/`mergeCapsule()`/`mergeCapsules()` merge by taking the
+   per-source, per-field max, which is provably commutative, associative,
+   and idempotent — merging the same capsule twice, or in a different
+   order, can never double-count or corrupt history. Two ERAL instances
+   that have never made a network call to each other can synchronize their
+   learned history as a plain JSON file: commit it to git, email it,
+   `scp` it, whatever — see `examples/twin-capsule-demo.ts`, which
+   verifies all three CRDT properties on real data, and
+   `npm run merge-twins -- a.json b.json --out merged.json` for the
+   file-only CLI. (`src/server.ts` also exposes `GET /twin/export` /
+   `POST /twin/merge` as a convenience, but the network is never required
+   for this to work correctly.)
 
-All three are opt-in via `ExecuteOptions` (`registry`, `simulate`,
-`onTrace`) — omit them and `execute()` is exactly the stateless v1 gate.
+All four are opt-in — `registry`/`simulate`/`onTrace` via `ExecuteOptions`,
+capsule sync via the standalone `exportCapsule`/`mergeCapsule` functions —
+omit them and `execute()` is exactly the stateless v1 gate.
 
 ## Layout
 
@@ -61,11 +79,12 @@ src/
   confidence.ts         Logic matrix: confidence formula + SAFE/UNCERTAIN/RISKY gating + registry calibration
   engine.ts             Constrained runtime script: execute() entry point, wires all three pillars
   feedback.ts           Toy online feedback loop (superseded by src/calibration.ts for real use)
-  registry.ts           Pillar 1: Digital Twin Registry (Beta-Bernoulli trajectory memory)
+  registry.ts           Pillar 1 + 4: Digital Twin Registry (per-source G-Counter CRDT) + Capsule export/merge
   simulate.ts           Pillar 2: shadow-clone interrupt-removal counterfactual (Playwright-dependent)
   calibration.ts        Pillar 3: offline weight calibration by log-loss grid search
   playwright-driver.ts  Real DomState sampler (MutationObserver/PerformanceObserver/network events)
-  server.ts             HTTP surface: /health, /status, /gate, /report (see "Running as a service" below)
+  server.ts             HTTP surface: /health, /status, /gate, /report, /twin/export, /twin/merge
+                        (see "Running as a service" below -- capsule sync never requires this file)
   index.ts              Barrel export (core only — playwright-driver.ts/simulate.ts are separate,
                         optional-peer-dependency modules, imported directly); also the deploy entry
                         point (starts the server iff executed directly, e.g. `node dist/src/index.js`)
@@ -77,8 +96,10 @@ examples/
   registry-learning-demo.ts  Pillar 1: confidence rises from UNCERTAIN to SAFE purely from learned history
   simulate-interrupt-demo.ts Pillar 2: real overlay gated, then cleared by shadow-clone simulation
   calibration-demo.ts        Pillar 3: recovers a known ground-truth weighting from outcomes alone
+  twin-capsule-demo.ts       Pillar 4: proves capsule merge is commutative, associative, idempotent
 scripts/
   calibrate.ts    CLI: reads a JSONL trace corpus, prints calibrated weights vs. the default baseline
+  merge-twins.ts  CLI: merges N capsule JSON files into one -- pure file I/O, no server, no network
 docs/
   PROMPT.md       The finalized ERAL v1.0 meta-prompt used to generate new atoms
 rust/eral-core/
@@ -99,6 +120,8 @@ npm run demo:registry     # Pillar 1: learned trajectory memory
 npm run demo:simulate     # Pillar 2: shadow-clone counterfactual, real Chromium
 npm run demo:calibration  # Pillar 3: recovers ground-truth weights from synthetic outcomes
 npm run calibrate -- <traces.jsonl>   # Pillar 3 CLI against a real trace corpus
+npm run demo:capsule      # Pillar 4: proves CRDT merge correctness on real data
+npm run merge-twins -- a.json b.json --out merged.json   # Pillar 4 CLI, zero network
 ```
 
 ```ts
@@ -168,7 +191,15 @@ POST /gate     -> body: { task, domState, domain? }
                   returns: { vector, instantConfidence, confidence, riskClass, trajectory }
 POST /report   -> body: { domain, selectorPattern, actionKind, success }
                   returns: { stats } (the updated Beta-Bernoulli posterior)
+GET  /twin/export -> this instance's Capsule (see Pillar 4 above)
+POST /twin/merge  -> body: a Capsule -> merges it in, returns { merged, trajectoriesTracked }
 ```
+
+`/twin/export` and `/twin/merge` are a convenience wrapper around
+`exportCapsule()`/`mergeCapsule()` -- nothing about capsule sync actually
+requires a server. `curl <host>/twin/export > capsule.json` today,
+`npm run merge-twins` next week with a teammate's capsule, or commit the
+file to git -- all three are equally valid.
 
 `/gate` and `/report` expose exactly the Digital Twin Registry math from
 `src/confidence.ts`/`src/registry.ts` as a shared, network-accessible
